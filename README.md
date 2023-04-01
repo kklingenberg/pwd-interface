@@ -1,22 +1,34 @@
 # PWD interface
 
-This is a simple and insecure HTTP server that can serve a folder of files and
-receive new files, which will be placed as randomly named in the same
-folder. It's an attempt to ease the use of
+This is a simple and **insecure** HTTP server that can serve a folder of files
+and receive new files. It's an attempt to ease the use of
 [play-with-docker](https://labs.play-with-docker.com/) instances when pushing
 and pulling files into/from them.
 
 ## Usage
 
+In the PWD instance:
+
 ```bash
-docker run --rm -p 80:80 -v /path/to/folder:/srv plotter/pwd-interface
+docker run --rm --name pwdi -d -p 80:80 -v $(pwd):/srv plotter/pwd-interface
+docker logs pwdi
 ```
 
-To push a file, use `curl` with a multipart upload, alongside the `--user`
-option shown in the console. The randomly generated name is returned in the
-response.
+Take note of the token shown in the logs, and then **expose port 80** via the
+web interface and copy the new tab's URL. These two values (the token and URL)
+must be given to the client.
 
-To pull a file, also use given credentials and access the file by name.
+In your local machine (grab the client from the [releases
+page](https://github.com/kklingenberg/pwd-interface/releases)):
 
-_If_ you're using this by some chance and your data is sensitive, I'd recommend
-you stop the container as soon as you're done with the file exchange.
+```bash
+pwdi-client
+```
+
+Then use `token <token>` to configure the token and `server <url>` to configure
+the URL you got from the PWD instance. Finally, use `pull` and `push` to fetch
+files from, and send files to the PWD instance.
+
+You may also add a `.pwdiignore` file at the root of your local folder to
+exclude some files from the transfer ([syntax
+reference](https://git-scm.com/docs/gitignore#_pattern_format)).
