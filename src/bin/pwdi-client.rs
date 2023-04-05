@@ -32,6 +32,8 @@ fn help() {
 help          Show this message
 server        Show the server URL
 server <url>  Set the server URL to <url>
+proxy         Show whether the system proxy is being used
+proxy <bool>  Set whether the system proxy is used
 token         Show the token
 token <key>   Set the token to <key>
 push          Push the current local directory to the server
@@ -63,7 +65,6 @@ fn push(
                                 .post(server)
                                 .basic_auth(auth_token, None::<&str>)
                                 .multipart(form)
-                                .timeout(Duration::from_secs(30))
                                 .send()
                                 .map_err(Error::new)
                         })
@@ -103,7 +104,6 @@ fn pull(
             client
                 .get(server)
                 .basic_auth(auth_token, None::<&str>)
-                .timeout(Duration::from_secs(30))
                 .send()
                 .map_err(Error::new)
         }) {
@@ -139,16 +139,28 @@ fn pull(
     }
 }
 
+static APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
 /// REPL
 fn main() -> Result<()> {
-    welcome();
-    prompt()?;
     let mut server = String::from("http://localhost");
+    let mut proxy = false;
     let mut token = String::from("not-set");
     let mut input = String::new();
     let working_directory = Path::new(".");
-    let client = Client::new();
+    let proxied_client = Client::builder()
+        .user_agent(APP_USER_AGENT)
+        .timeout(Duration::from_secs(30))
+        .build()?;
+    let direct_client = Client::builder()
+        .user_agent(APP_USER_AGENT)
+        .timeout(Duration::from_secs(30))
+        .no_proxy()
+        .build()?;
     let mut bundler = bundler::Bundler::new();
+
+    welcome();
+    prompt()?;
     loop {
         stdin().read_line(&mut input)?;
         let clean = input.trim();
@@ -169,6 +181,21 @@ fn main() -> Result<()> {
             server.push_str(clean.strip_prefix("server ").unwrap().trim());
             println!("Set the value of the server URL to: {:?}", server);
             prompt()?;
+        } else if clean == "proxy" {
+            println!("The value of the proxy flag is: {:?}", proxy);
+            prompt()?;
+        } else if clean.starts_with("proxy ") {
+            let proxy_value = clean.strip_prefix("proxy ").unwrap().trim();
+            if proxy_value == "true" {
+                proxy = true;
+                println!("Set the value of the proxy flag to: {:?}", proxy);
+            } else if proxy_value == "false" {
+                proxy = false;
+                println!("Set the value of the proxy flag to: {:?}", proxy);
+            } else {
+                println!("Invalid value given to the proxy flag. Use 'true' or 'false' only.");
+            }
+            prompt()?;
         } else if clean == "token" {
             println!("The value of the token is: {:?}", token);
             prompt()?;
@@ -178,10 +205,30 @@ fn main() -> Result<()> {
             println!("Set the value of the token to: {:?}", token);
             prompt()?;
         } else if clean == "push" {
-            push(&client, &mut bundler, working_directory, &server, &token);
+            push(
+                if proxy {
+                    &proxied_client
+                } else {
+                    &direct_client
+                },
+                &mut bundler,
+                working_directory,
+                &server,
+                &token,
+            );
             prompt()?;
         } else if clean == "pull" {
-            pull(&client, &mut bundler, working_directory, &server, &token);
+            pull(
+                if proxy {
+                    &proxied_client
+                } else {
+                    &direct_client
+                },
+                &mut bundler,
+                working_directory,
+                &server,
+                &token,
+            );
             prompt()?;
         } else {
             println!("Invalid command. Use 'help' for a list of valid options.");
